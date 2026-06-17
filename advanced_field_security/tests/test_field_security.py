@@ -10,8 +10,11 @@ class TestFieldSecurityV2(TransactionCase):
         self.test_user = self.env['res.users'].create({
             'name': 'Test User V2',
             'login': 'test_user_v2',
-            'groups_id': [(4, self.test_group.id), (4, self.env.ref('base.group_user').id)]
         })
+        try:
+            self.test_user.write({'groups_id': [(4, self.test_group.id), (4, self.env.ref('base.group_user').id)]})
+        except ValueError:
+            self.test_user.write({'group_ids': [(4, self.test_group.id), (4, self.env.ref('base.group_user').id)]})
         
         self.partner_model = self.env['ir.model'].search([('model', '=', 'res.partner')], limit=1)
         self.phone_field = self.env['ir.model.fields'].search([

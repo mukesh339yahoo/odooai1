@@ -20,7 +20,7 @@ class BaseModel(models.AbstractModel):
             return
 
         user = self.env.user
-        user_groups = user.groups_id
+        user_groups = getattr(user, 'group_ids', getattr(user, 'groups_id', self.env['res.groups']))
         
         applied_rules = []
         for rule in rules:
@@ -111,7 +111,7 @@ class BaseModel(models.AbstractModel):
             return res
 
         user = self.env.user
-        user_groups = user.groups_id
+        user_groups = getattr(user, 'group_ids', getattr(user, 'groups_id', self.env['res.groups']))
         
         for rule in rules:
             match = False

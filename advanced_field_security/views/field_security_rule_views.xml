@@ -63,11 +63,10 @@
                 <field name="field_id"/>
                 <field name="button_name"/>
                 <filter string="Archived" name="inactive" domain="[('active', '=', False)]"/>
-                <group expand="0" string="Group By">
-                    <filter string="Model" name="group_by_model" domain="[]" context="{'group_by': 'model_id'}"/>
-                    <filter string="Target Type" name="group_by_target" domain="[]" context="{'group_by': 'target_type'}"/>
-                    <filter string="Rule Type" name="group_by_rule_type" domain="[]" context="{'group_by': 'rule_type'}"/>
-                </group>
+                <separator/>
+                <filter string="Group By Model" name="group_by_model" domain="[]" context="{'group_by': 'model_id'}"/>
+                <filter string="Group By Target Type" name="group_by_target" domain="[]" context="{'group_by': 'target_type'}"/>
+                <filter string="Group By Rule Type" name="group_by_rule_type" domain="[]" context="{'group_by': 'rule_type'}"/>
             </search>
         </field>
     </record>
