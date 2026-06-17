@@ -9,14 +9,9 @@ class BaseModel(models.AbstractModel):
 
     @api.model
     def _apply_field_security_rules_to_arch(self, arch_node, view_type):
-        """
-        Parses the view architecture and applies field security rules.
-        """
-        # Skip if superuser
         if self.env.is_superuser():
             return
 
-        # Fetch active rules for the current model
         rules = self.env['field.security.rule'].sudo().search([
             ('model_id.model', '=', self._name)
         ])
@@ -24,48 +19,68 @@ class BaseModel(models.AbstractModel):
         if not rules:
             return
 
-        # Check which rules apply to the current user
-        user_groups = self.env.user.groups_id
+        user = self.env.user
+        user_groups = user.groups_id
+        
         applied_rules = []
         for rule in rules:
-            if any(g in user_groups for g in rule.group_ids):
+            # Check View Type Granularity
+            if rule.view_type != 'all' and rule.view_type != view_type:
+                continue
+                
+            # Check User/Group logic
+            match = False
+            if user in rule.user_ids or any(g in user_groups for g in rule.group_ids):
+                match = True
+                
+            if rule.apply_behavior == 'include' and match:
+                applied_rules.append(rule)
+            elif rule.apply_behavior == 'exclude' and not match:
                 applied_rules.append(rule)
 
         if not applied_rules:
             return
 
-        # Group rules by field name
         rules_by_field = {}
+        rules_by_button = {}
+        
         for rule in applied_rules:
-            field_name = rule.field_id.name
-            if field_name not in rules_by_field:
-                rules_by_field[field_name] = []
-            rules_by_field[field_name].append(rule.rule_type)
+            if rule.target_type == 'field' and rule.field_id:
+                if rule.field_id.name not in rules_by_field:
+                    rules_by_field[rule.field_id.name] = []
+                rules_by_field[rule.field_id.name].append(rule)
+            elif rule.target_type == 'button' and rule.button_name:
+                if rule.button_name not in rules_by_button:
+                    rules_by_button[rule.button_name] = []
+                rules_by_button[rule.button_name].append(rule)
 
-        # Iterate over all field nodes in the view
+        # Apply to fields
         for node in arch_node.xpath('//field'):
             field_name = node.get('name')
             if field_name in rules_by_field:
-                rule_types = rules_by_field[field_name]
-                
-                # Apply rules
-                if 'invisible' in rule_types:
-                    node.set('invisible', '1')
-                
-                if 'readonly' in rule_types:
-                    # In Odoo 17+, readonly modifier is directly on the node or in modifiers
-                    node.set('readonly', '1')
-                    if node.get('force_save') is None:
-                        node.set('force_save', '1')
-                        
-                if 'required' in rule_types:
-                    node.set('required', '1')
+                for rule in rules_by_field[field_name]:
+                    self._inject_rule_modifier(node, rule)
+                    
+        # Apply to buttons
+        for node in arch_node.xpath('//button'):
+            button_name = node.get('name')
+            if button_name in rules_by_button:
+                for rule in rules_by_button[button_name]:
+                    self._inject_rule_modifier(node, rule)
+
+    def _inject_rule_modifier(self, node, rule):
+        modifier = rule.rule_type
+        if modifier == 'no_export':
+            return
+            
+        value = rule.domain or '1'
+        node.set(modifier, value)
+        
+        if modifier == 'readonly' and node.get('force_save') is None:
+            node.set('force_save', '1')
 
     @api.model
     def get_view(self, view_id=None, view_type='form', **options):
-        """
-        Override get_view to intercept the arch and apply security rules.
-        """
         res = super(BaseModel, self).get_view(view_id=view_id, view_type=view_type, **options)
         
         try:
@@ -79,32 +94,39 @@ class BaseModel(models.AbstractModel):
 
     @api.model
     def fields_get(self, allfields=None, attributes=None):
-        """
-        Override fields_get to enforce invisible rules at the field level,
-        preventing RPC field discovery and export.
-        """
         res = super(BaseModel, self).fields_get(allfields=allfields, attributes=attributes)
         
         if self.env.is_superuser():
             return res
 
         rules = self.env['field.security.rule'].sudo().search([
-            ('model_id.model', '=', self._name)
+            ('model_id.model', '=', self._name),
+            ('target_type', '=', 'field')
         ])
         
         if not rules:
             return res
 
-        user_groups = self.env.user.groups_id
+        user = self.env.user
+        user_groups = user.groups_id
+        
         for rule in rules:
-            if any(g in user_groups for g in rule.group_ids):
+            match = False
+            if user in rule.user_ids or any(g in user_groups for g in rule.group_ids):
+                match = True
+                
+            applies = (rule.apply_behavior == 'include' and match) or (rule.apply_behavior == 'exclude' and not match)
+            
+            if applies:
                 field_name = rule.field_id.name
                 if field_name in res:
-                    if rule.rule_type == 'invisible':
+                    if rule.rule_type == 'invisible' and not rule.domain:
                         res.pop(field_name, None)
-                    elif rule.rule_type == 'readonly':
+                    elif rule.rule_type == 'readonly' and not rule.domain:
                         res[field_name]['readonly'] = True
-                    elif rule.rule_type == 'required':
+                    elif rule.rule_type == 'required' and not rule.domain:
                         res[field_name]['required'] = True
+                    elif rule.rule_type == 'no_export':
+                        res[field_name]['exportable'] = False
                         
         return res

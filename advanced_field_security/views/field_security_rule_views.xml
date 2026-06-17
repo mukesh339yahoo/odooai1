@@ -1,24 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-
     <!-- Form View -->
     <record id="view_field_security_rule_form" model="ir.ui.view">
         <field name="name">field.security.rule.form</field>
         <field name="model">field.security.rule</field>
         <field name="arch" type="xml">
-            <form string="Field Security Rule">
+            <form string="Field &amp; UI Security Rule">
                 <sheet>
                     <widget name="web_ribbon" title="Archived" bg_color="bg-danger" invisible="active == True"/>
                     <group>
                         <group>
                             <field name="active" invisible="1"/>
                             <field name="model_id" options="{'no_create': True}"/>
+                            <field name="target_type" widget="radio" options="{'horizontal': true}"/>
                             <field name="field_id" options="{'no_create': True}" 
-                                   context="{'default_model_id': model_id}"/>
+                                   context="{'default_model_id': model_id}"
+                                   invisible="target_type != 'field'"
+                                   required="target_type == 'field'"/>
+                            <field name="button_name" 
+                                   invisible="target_type != 'button'"
+                                   required="target_type == 'button'"/>
+                            <field name="rule_type"/>
+                            <field name="view_type"/>
+                            <field name="domain" placeholder="e.g. [('state', '=', 'done')]"/>
                         </group>
                         <group>
-                            <field name="rule_type"/>
-                            <field name="group_ids" widget="many2many_tags"/>
+                            <field name="apply_behavior" widget="radio" options="{'horizontal': true}"/>
+                            <field name="group_ids" widget="many2many_tags" placeholder="Groups..."/>
+                            <field name="user_ids" widget="many2many_tags" placeholder="Specific Users..."/>
                         </group>
                     </group>
                 </sheet>
@@ -33,9 +42,13 @@
         <field name="arch" type="xml">
             <tree string="Field Security Rules">
                 <field name="model_id"/>
-                <field name="field_id"/>
+                <field name="target_type"/>
+                <field name="field_id" optional="show"/>
+                <field name="button_name" optional="show"/>
                 <field name="rule_type"/>
-                <field name="group_ids" widget="many2many_tags"/>
+                <field name="apply_behavior"/>
+                <field name="view_type"/>
+                <field name="active" widget="boolean_toggle"/>
             </tree>
         </field>
     </record>
@@ -48,9 +61,11 @@
             <search string="Search Rules">
                 <field name="model_id"/>
                 <field name="field_id"/>
+                <field name="button_name"/>
                 <filter string="Archived" name="inactive" domain="[('active', '=', False)]"/>
                 <group expand="0" string="Group By">
                     <filter string="Model" name="group_by_model" domain="[]" context="{'group_by': 'model_id'}"/>
+                    <filter string="Target Type" name="group_by_target" domain="[]" context="{'group_by': 'target_type'}"/>
                     <filter string="Rule Type" name="group_by_rule_type" domain="[]" context="{'group_by': 'rule_type'}"/>
                 </group>
             </search>
@@ -59,15 +74,15 @@
 
     <!-- Action -->
     <record id="action_field_security_rule" model="ir.actions.act_window">
-        <field name="name">Field Security Rules</field>
+        <field name="name">UI &amp; Field Security Rules</field>
         <field name="res_model">field.security.rule</field>
         <field name="view_mode">tree,form</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
-                Create your first field security rule!
+                Create your first UI security rule!
             </p>
             <p>
-                Use rules to hide, make read-only, or require specific fields for certain user groups without custom code.
+                Use rules to hide, make read-only, or require specific fields and buttons for certain user groups without custom code.
             </p>
         </field>
     </record>
