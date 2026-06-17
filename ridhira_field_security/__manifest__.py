@@ -8,7 +8,8 @@
         (Invisible, Readonly, Required) dynamically based on User Groups
         without requiring any custom XML development.
     """,
-    'author': 'Your Company',
+    'author': 'Ridhira Technologies, Pune, India',
+    'website': 'https://ridhira.desigoogly.com',
     'depends': ['base'],
     'data': [
         'security/ir.model.access.csv',
