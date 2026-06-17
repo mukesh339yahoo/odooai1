@@ -26,7 +26,10 @@ class BaseModel(models.AbstractModel):
         for rule in rules:
             # Check View Type Granularity
             if rule.view_type != 'all' and rule.view_type != view_type:
-                continue
+                if rule.view_type == 'tree' and view_type in ('tree', 'list'):
+                    pass
+                else:
+                    continue
                 
             # Check User/Group logic
             match = False

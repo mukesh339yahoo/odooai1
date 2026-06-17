@@ -74,10 +74,10 @@ class TestFieldSecurityV2(TransactionCase):
         self.env['res.partner'].with_user(self.test_user)._apply_field_security_rules_to_arch(arch_node, 'form')
         self.assertIsNone(arch_node.xpath('//field[@name="phone"]')[0].get('invisible'))
         
-        # Tree view SHOULD be modified
-        tree_arch_str = '<tree><field name="phone"/></tree>'
+        # List view SHOULD be modified
+        tree_arch_str = '<list><field name="phone"/></list>'
         tree_node = etree.fromstring(tree_arch_str)
-        self.env['res.partner'].with_user(self.test_user)._apply_field_security_rules_to_arch(tree_node, 'tree')
+        self.env['res.partner'].with_user(self.test_user)._apply_field_security_rules_to_arch(tree_node, 'list')
         self.assertEqual(tree_node.xpath('//field[@name="phone"]')[0].get('invisible'), '1')
 
     def test_04_no_export_protection(self):
