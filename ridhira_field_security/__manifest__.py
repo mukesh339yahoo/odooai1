@@ -10,6 +10,7 @@
     """,
     'author': 'Ridhira Technologies, Pune, India',
     'website': 'https://ridhira.desigoogly.com',
+    'images': ['static/description/screenshot_1.png'],
     'depends': ['base'],
     'data': [
         'security/ir.model.access.csv',
