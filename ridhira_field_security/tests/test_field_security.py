@@ -1,5 +1,5 @@
 from odoo.tests.common import TransactionCase
-from odoo.exceptions import ValidationError
+from odoo.exceptions import ValidationError, AccessError
 from lxml import etree
 
 class TestFieldSecurityV2(TransactionCase):
@@ -32,8 +32,6 @@ class TestFieldSecurityV2(TransactionCase):
             'rule_type': 'invisible'
         })
         
-        # We need to simulate a view with this button since standard partner might not have action_test_button
-        # We will inject a dummy button arch and call _apply_field_security_rules_to_arch directly
         arch_str = '<form><button name="action_test_button" type="object" string="Test"/></form>'
         arch_node = etree.fromstring(arch_str)
         
@@ -99,8 +97,8 @@ class TestFieldSecurityV2(TransactionCase):
         rule_tree.unlink()
 
     def test_04_no_export_protection(self):
-        """Test that no_export rule blocks the field from exportable metadata."""
-        self.env['field.security.rule'].create({
+        """Test that no_export rule blocks the field from exportable metadata and export_data."""
+        rule = self.env['field.security.rule'].create({
             'model_id': self.partner_model.id,
             'field_id': self.phone_field.id,
             'group_ids': [(4, self.test_group.id)],
@@ -110,8 +108,16 @@ class TestFieldSecurityV2(TransactionCase):
         fields_info = self.env['res.partner'].with_user(self.test_user).fields_get(allfields=['phone'])
         self.assertFalse(fields_info.get('phone', {}).get('exportable', True), "Phone field should have exportable=False")
 
+        # Test export_data filtering
+        partner = self.env['res.partner'].create({'name': 'Test Partner Export', 'phone': '1234567890'})
+        export_res = partner.with_user(self.test_user).export_data(['name', 'phone'])
+        exported_cols = export_res.get('datas', [[]])[0]
+        # 'phone' should be stripped from exported columns for unauthorized user
+        self.assertEqual(len(exported_cols), 1, "Only 'name' should be exported; 'phone' must be blocked.")
+        rule.unlink()
+
     def test_05_target_validation(self):
-        """Test that field_id is required for field target and button_name is required for button target."""
+        """Test that required fields are enforced per target_type."""
         with self.assertRaises((ValidationError, Exception)):
             self.env['field.security.rule'].create({
                 'model_id': self.partner_model.id,
@@ -124,3 +130,80 @@ class TestFieldSecurityV2(TransactionCase):
                 'target_type': 'button',
                 'button_name': False,
             })
+        with self.assertRaises((ValidationError, Exception)):
+            self.env['field.security.rule'].create({
+                'model_id': self.partner_model.id,
+                'target_type': 'page',
+                'page_name': False,
+            })
+
+    def test_06_server_side_write_protection(self):
+        """Test that server-side write is blocked at the ORM level when enforce_backend is enabled."""
+        rule = self.env['field.security.rule'].create({
+            'model_id': self.partner_model.id,
+            'target_type': 'field',
+            'field_id': self.phone_field.id,
+            'group_ids': [(4, self.test_group.id)],
+            'rule_type': 'readonly',
+            'enforce_backend': True,
+        })
+        
+        partner = self.env['res.partner'].create({'name': 'Test Partner', 'phone': '1111111111'})
+        
+        # Test write raises AccessError for unauthorized user
+        with self.assertRaises(AccessError):
+            partner.with_user(self.test_user).write({'phone': '9999999999'})
+            
+        # Admin can still write without restriction
+        partner.write({'phone': '2222222222'})
+        self.assertEqual(partner.phone, '2222222222')
+        rule.unlink()
+
+    def test_07_data_masking(self):
+        """Test that confidential data is masked in read() operations."""
+        rule = self.env['field.security.rule'].create({
+            'model_id': self.partner_model.id,
+            'target_type': 'field',
+            'field_id': self.phone_field.id,
+            'group_ids': [(4, self.test_group.id)],
+            'rule_type': 'mask',
+            'masking_pattern': 'partial_end'
+        })
+        
+        partner = self.env['res.partner'].create({'name': 'Secret Client', 'phone': '9876543210'})
+        
+        # Test user reading phone should see masked data
+        read_res = partner.with_user(self.test_user).read(['name', 'phone'])
+        self.assertTrue(read_res[0]['phone'].endswith('3210'), "Phone should end with unmasked digits")
+        self.assertTrue('*' in read_res[0]['phone'], "Phone should contain asterisks")
+        
+        # Admin reading phone gets unmasked data
+        admin_read = partner.read(['name', 'phone'])
+        self.assertEqual(admin_read[0]['phone'], '9876543210')
+        rule.unlink()
+
+    def test_08_tab_page_hiding(self):
+        """Test that an entire notebook page/tab is hidden via arch modification."""
+        rule = self.env['field.security.rule'].create({
+            'model_id': self.partner_model.id,
+            'target_type': 'page',
+            'page_name': 'internal_notes',
+            'group_ids': [(4, self.test_group.id)],
+            'rule_type': 'invisible'
+        })
+        
+        arch_str = (
+            '<form><notebook>'
+            '<page name="internal_notes" string="Internal Notes"><field name="comment"/></page>'
+            '<page name="public_info" string="Public"><field name="name"/></page>'
+            '</notebook></form>'
+        )
+        arch_node = etree.fromstring(arch_str)
+        self.env['res.partner'].with_user(self.test_user)._apply_field_security_rules_to_arch(arch_node, 'form')
+        
+        page_node = arch_node.xpath('//page[@name="internal_notes"]')[0]
+        self.assertEqual(page_node.get('invisible'), '1', "Internal Notes tab should be marked invisible")
+        
+        public_node = arch_node.xpath('//page[@name="public_info"]')[0]
+        self.assertIsNone(public_node.get('invisible'), "Public tab should remain visible")
+        rule.unlink()

@@ -8,8 +8,14 @@
             <form string="Field &amp; UI Security Rule">
                 <sheet>
                     <widget name="web_ribbon" title="Archived" bg_color="bg-danger" invisible="active"/>
+                    <div class="oe_title">
+                        <label for="name" class="oe_edit_only" string="Rule Name"/>
+                        <h1>
+                            <field name="name" placeholder="e.g. Hide Cost Price from Sales"/>
+                        </h1>
+                    </div>
                     <group>
-                        <group>
+                        <group string="Target Configuration">
                             <field name="active" invisible="1"/>
                             <field name="model_id" options="{'no_create': True}"/>
                             <field name="target_type" widget="radio" options="{'horizontal': True}"/>
@@ -20,15 +26,27 @@
                             <field name="button_name" 
                                    invisible="target_type != 'button'"
                                    required="target_type == 'button'"/>
+                            <field name="page_name" 
+                                   invisible="target_type != 'page'"
+                                   required="target_type == 'page'"/>
                             <field name="rule_type"/>
+                            <field name="masking_pattern"
+                                   invisible="rule_type != 'mask'"
+                                   required="rule_type == 'mask'"/>
+                            <field name="enforce_backend"
+                                   invisible="rule_type not in ('readonly', 'invisible') or target_type != 'field'"/>
+                        </group>
+                        <group string="Scope &amp; Conditions">
+                            <field name="sequence"/>
                             <field name="view_type"/>
                             <field name="domain" placeholder="e.g. state == 'done'"/>
+                            <field name="company_id" options="{'no_create': True}" groups="base.group_multi_company"/>
                         </group>
-                        <group>
-                            <field name="apply_behavior" widget="radio" options="{'horizontal': True}"/>
-                            <field name="group_ids" widget="many2many_tags" placeholder="Groups..."/>
-                            <field name="user_ids" widget="many2many_tags" placeholder="Specific Users..."/>
-                        </group>
+                    </group>
+                    <group string="User &amp; Group Permissions">
+                        <field name="apply_behavior" widget="radio" options="{'horizontal': True}"/>
+                        <field name="group_ids" widget="many2many_tags" placeholder="User Groups to Include/Exclude..."/>
+                        <field name="user_ids" widget="many2many_tags" placeholder="Specific Users to Include/Exclude..."/>
                     </group>
                 </sheet>
             </form>
@@ -41,13 +59,22 @@
         <field name="model">field.security.rule</field>
         <field name="arch" type="xml">
             <list string="Field Security Rules">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
                 <field name="model_id"/>
                 <field name="target_type"/>
                 <field name="field_id" optional="show"/>
-                <field name="button_name" optional="show"/>
-                <field name="rule_type"/>
+                <field name="button_name" optional="hide"/>
+                <field name="page_name" optional="hide"/>
+                <field name="rule_type" 
+                       decoration-danger="rule_type in ('invisible', 'no_export')"
+                       decoration-warning="rule_type == 'readonly'"
+                       decoration-info="rule_type == 'required'"
+                       decoration-success="rule_type == 'mask'"/>
+                <field name="enforce_backend" widget="boolean_toggle" optional="show"/>
                 <field name="apply_behavior"/>
-                <field name="view_type"/>
+                <field name="view_type" optional="hide"/>
+                <field name="company_id" optional="hide" groups="base.group_multi_company"/>
                 <field name="active" widget="boolean_toggle"/>
             </list>
         </field>
@@ -59,14 +86,24 @@
         <field name="model">field.security.rule</field>
         <field name="arch" type="xml">
             <search string="Search Rules">
+                <field name="name"/>
                 <field name="model_id"/>
                 <field name="field_id"/>
                 <field name="button_name"/>
+                <field name="page_name"/>
                 <filter string="Archived" name="inactive" domain="[('active', '=', False)]"/>
+                <separator/>
+                <filter string="Server Enforced" name="enforced" domain="[('enforce_backend', '=', True)]"/>
+                <separator/>
+                <filter string="Field Rules" name="fields_only" domain="[('target_type', '=', 'field')]"/>
+                <filter string="Button Rules" name="buttons_only" domain="[('target_type', '=', 'button')]"/>
+                <filter string="Tab / Page Rules" name="pages_only" domain="[('target_type', '=', 'page')]"/>
+                <filter string="Masking Rules" name="masking_only" domain="[('rule_type', '=', 'mask')]"/>
                 <separator/>
                 <filter string="Group By Model" name="group_by_model" domain="[]" context="{'group_by': 'model_id'}"/>
                 <filter string="Group By Target Type" name="group_by_target" domain="[]" context="{'group_by': 'target_type'}"/>
                 <filter string="Group By Rule Type" name="group_by_rule_type" domain="[]" context="{'group_by': 'rule_type'}"/>
+                <filter string="Group By Company" name="group_by_company" domain="[]" context="{'group_by': 'company_id'}" groups="base.group_multi_company"/>
             </search>
         </field>
     </record>
@@ -78,10 +115,10 @@
         <field name="view_mode">list,form</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
-                Create your first UI security rule!
+                Create your first UI &amp; Field Security Rule!
             </p>
             <p>
-                Use rules to hide, make read-only, or require specific fields and buttons for certain user groups without custom code.
+                Configure field-level security, hide action buttons or notebook tabs, mask confidential data, and enforce server-side write restrictions without any custom development.
             </p>
         </field>
     </record>
