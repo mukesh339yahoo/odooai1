@@ -1,6 +1,6 @@
 {
     'name': 'Advanced Field-Level Security',
-    'version': '1.0.0',
+    'version': '20.0.1.0.0',
     'category': 'Administration/Security',
     'summary': 'Configure field-level security rules without custom code',
     'description': """

@@ -1,4 +1,5 @@
 from odoo import models, fields, api
+from odoo.exceptions import ValidationError
 
 class FieldSecurityRule(models.Model):
     _name = 'field.security.rule'
@@ -25,7 +26,8 @@ class FieldSecurityRule(models.Model):
     view_type = fields.Selection([
         ('all', 'All Views'),
         ('form', 'Form View Only'),
-        ('tree', 'Tree/List View Only')
+        ('list', 'List View Only'),
+        ('tree', 'List View Only (Legacy)')
     ], string='Apply to View', required=True, default='all')
     
     rule_type = fields.Selection([
@@ -35,10 +37,29 @@ class FieldSecurityRule(models.Model):
         ('no_export', 'Prevent Export')
     ], string='Rule Type', required=True, default='invisible')
     
-    domain = fields.Char(string='Condition (Domain)', help="e.g., [('state', '=', 'done')]")
+    domain = fields.Char(string='Condition (Domain / Expression)', help="e.g., state == 'done' or [('state', '=', 'done')]")
     active = fields.Boolean(default=True, string='Active')
 
-    _sql_constraints = [
-        ('target_required_field', "CHECK((target_type='field' AND field_id IS NOT NULL) OR (target_type='button'))", 'Field is required when target type is Field.'),
-        ('target_required_button', "CHECK((target_type='button' AND button_name IS NOT NULL) OR (target_type='field'))", 'Button Name is required when target type is Button.')
-    ]
+    # Odoo 19 & 20 models.Constraint with backward compatibility fallback
+    if hasattr(models, 'Constraint'):
+        _target_required_field = models.Constraint(
+            "CHECK((target_type='field' AND field_id IS NOT NULL) OR (target_type='button'))",
+            'Field is required when target type is Field.'
+        )
+        _target_required_button = models.Constraint(
+            "CHECK((target_type='button' AND button_name IS NOT NULL) OR (target_type='field'))",
+            'Button Name is required when target type is Button.'
+        )
+    else:
+        _sql_constraints = [
+            ('target_required_field', "CHECK((target_type='field' AND field_id IS NOT NULL) OR (target_type='button'))", 'Field is required when target type is Field.'),
+            ('target_required_button', "CHECK((target_type='button' AND button_name IS NOT NULL) OR (target_type='field'))", 'Button Name is required when target type is Button.')
+        ]
+
+    @api.constrains('target_type', 'field_id', 'button_name')
+    def _check_target(self):
+        for record in self:
+            if record.target_type == 'field' and not record.field_id:
+                raise ValidationError("Field is required when target type is Field.")
+            if record.target_type == 'button' and not record.button_name:
+                raise ValidationError("Button Name is required when target type is Button.")

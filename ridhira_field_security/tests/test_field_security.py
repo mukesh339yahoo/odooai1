@@ -1,20 +1,20 @@
 from odoo.tests.common import TransactionCase
+from odoo.exceptions import ValidationError
 from lxml import etree
 
 class TestFieldSecurityV2(TransactionCase):
 
     def setUp(self):
-        super(TestFieldSecurityV2, self).setUp()
+        super().setUp()
         
         self.test_group = self.env['res.groups'].create({'name': 'Test Group'})
-        self.test_user = self.env['res.users'].create({
+        user_vals = {
             'name': 'Test User V2',
             'login': 'test_user_v2',
-        })
-        try:
-            self.test_user.write({'groups_id': [(4, self.test_group.id), (4, self.env.ref('base.group_user').id)]})
-        except ValueError:
-            self.test_user.write({'group_ids': [(4, self.test_group.id), (4, self.env.ref('base.group_user').id)]})
+        }
+        group_field = 'group_ids' if 'group_ids' in self.env['res.users']._fields else 'groups_id'
+        user_vals[group_field] = [(4, self.test_group.id), (4, self.env.ref('base.group_user').id)]
+        self.test_user = self.env['res.users'].create(user_vals)
         
         self.partner_model = self.env['ir.model'].search([('model', '=', 'res.partner')], limit=1)
         self.phone_field = self.env['ir.model.fields'].search([
@@ -63,11 +63,12 @@ class TestFieldSecurityV2(TransactionCase):
 
     def test_03_view_type_granularity(self):
         """Test that a rule only applies to the specific view type."""
-        self.env['field.security.rule'].create({
+        # Test with modern Odoo list view_type
+        rule_list = self.env['field.security.rule'].create({
             'model_id': self.partner_model.id,
             'field_id': self.phone_field.id,
             'group_ids': [(4, self.test_group.id)],
-            'view_type': 'tree',
+            'view_type': 'list',
             'rule_type': 'invisible'
         })
         
@@ -78,10 +79,24 @@ class TestFieldSecurityV2(TransactionCase):
         self.assertIsNone(arch_node.xpath('//field[@name="phone"]')[0].get('invisible'))
         
         # List view SHOULD be modified
-        tree_arch_str = '<list><field name="phone"/></list>'
-        tree_node = etree.fromstring(tree_arch_str)
+        list_arch_str = '<list><field name="phone"/></list>'
+        list_node = etree.fromstring(list_arch_str)
+        self.env['res.partner'].with_user(self.test_user)._apply_field_security_rules_to_arch(list_node, 'list')
+        self.assertEqual(list_node.xpath('//field[@name="phone"]')[0].get('invisible'), '1')
+        rule_list.unlink()
+
+        # Test backward compatibility with legacy tree view_type
+        rule_tree = self.env['field.security.rule'].create({
+            'model_id': self.partner_model.id,
+            'field_id': self.phone_field.id,
+            'group_ids': [(4, self.test_group.id)],
+            'view_type': 'tree',
+            'rule_type': 'invisible'
+        })
+        tree_node = etree.fromstring(list_arch_str)
         self.env['res.partner'].with_user(self.test_user)._apply_field_security_rules_to_arch(tree_node, 'list')
         self.assertEqual(tree_node.xpath('//field[@name="phone"]')[0].get('invisible'), '1')
+        rule_tree.unlink()
 
     def test_04_no_export_protection(self):
         """Test that no_export rule blocks the field from exportable metadata."""
@@ -94,3 +109,18 @@ class TestFieldSecurityV2(TransactionCase):
         
         fields_info = self.env['res.partner'].with_user(self.test_user).fields_get(allfields=['phone'])
         self.assertFalse(fields_info.get('phone', {}).get('exportable', True), "Phone field should have exportable=False")
+
+    def test_05_target_validation(self):
+        """Test that field_id is required for field target and button_name is required for button target."""
+        with self.assertRaises((ValidationError, Exception)):
+            self.env['field.security.rule'].create({
+                'model_id': self.partner_model.id,
+                'target_type': 'field',
+                'field_id': False,
+            })
+        with self.assertRaises((ValidationError, Exception)):
+            self.env['field.security.rule'].create({
+                'model_id': self.partner_model.id,
+                'target_type': 'button',
+                'button_name': False,
+            })

@@ -11,7 +11,7 @@ docker run -d -e POSTGRES_USER=odoo -e POSTGRES_PASSWORD=odoo -e POSTGRES_DB=pos
 echo "Waiting for database..."
 sleep 10
 
-for VERSION in "17.0" "18.0" "19.0"; do
+for VERSION in "17.0" "18.0" "19.0" "20.0"; do
     echo "======================================"
     echo "Testing Odoo $VERSION"
     echo "======================================"

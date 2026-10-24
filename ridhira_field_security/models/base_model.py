@@ -26,14 +26,14 @@ class BaseModel(models.AbstractModel):
         for rule in rules:
             # Check View Type Granularity
             if rule.view_type != 'all' and rule.view_type != view_type:
-                if rule.view_type == 'tree' and view_type in ('tree', 'list'):
+                if rule.view_type in ('tree', 'list') and view_type in ('tree', 'list'):
                     pass
                 else:
                     continue
                 
             # Check User/Group logic
             match = False
-            if user in rule.user_ids or any(g in user_groups for g in rule.group_ids):
+            if user in rule.user_ids or bool(user_groups & rule.group_ids):
                 match = True
                 
             if rule.apply_behavior == 'include' and match:
@@ -77,19 +77,28 @@ class BaseModel(models.AbstractModel):
             return
             
         value = rule.domain or '1'
-        node.set(modifier, value)
+        existing_val = node.get(modifier)
+        if existing_val and value != '1' and existing_val != '1' and existing_val != '0':
+            node.set(modifier, f"({existing_val}) or ({value})")
+        else:
+            node.set(modifier, value)
         
         if modifier == 'readonly' and node.get('force_save') is None:
             node.set('force_save', '1')
 
     @api.model
     def get_view(self, view_id=None, view_type='form', **options):
-        res = super(BaseModel, self).get_view(view_id=view_id, view_type=view_type, **options)
+        res = super().get_view(view_id=view_id, view_type=view_type, **options)
         
         try:
-            arch_node = etree.fromstring(res['arch'])
-            self._apply_field_security_rules_to_arch(arch_node, view_type)
-            res['arch'] = etree.tostring(arch_node, encoding='unicode')
+            arch_raw = res.get('arch') if isinstance(res, dict) else None
+            if arch_raw is not None:
+                if isinstance(arch_raw, str):
+                    arch_node = etree.fromstring(arch_raw)
+                    self._apply_field_security_rules_to_arch(arch_node, view_type)
+                    res['arch'] = etree.tostring(arch_node, encoding='unicode')
+                else:
+                    self._apply_field_security_rules_to_arch(arch_raw, view_type)
         except Exception as e:
             _logger.error("Failed to apply field security rules on %s: %s", self._name, e)
             
@@ -97,7 +106,7 @@ class BaseModel(models.AbstractModel):
 
     @api.model
     def fields_get(self, allfields=None, attributes=None):
-        res = super(BaseModel, self).fields_get(allfields=allfields, attributes=attributes)
+        res = super().fields_get(allfields=allfields, attributes=attributes)
         
         if self.env.is_superuser():
             return res
@@ -115,7 +124,7 @@ class BaseModel(models.AbstractModel):
         
         for rule in rules:
             match = False
-            if user in rule.user_ids or any(g in user_groups for g in rule.group_ids):
+            if user in rule.user_ids or bool(user_groups & rule.group_ids):
                 match = True
                 
             applies = (rule.apply_behavior == 'include' and match) or (rule.apply_behavior == 'exclude' and not match)

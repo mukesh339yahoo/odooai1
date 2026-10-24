@@ -7,12 +7,12 @@
         <field name="arch" type="xml">
             <form string="Field &amp; UI Security Rule">
                 <sheet>
-                    <widget name="web_ribbon" title="Archived" bg_color="bg-danger" invisible="active == True"/>
+                    <widget name="web_ribbon" title="Archived" bg_color="bg-danger" invisible="active"/>
                     <group>
                         <group>
                             <field name="active" invisible="1"/>
                             <field name="model_id" options="{'no_create': True}"/>
-                            <field name="target_type" widget="radio" options="{'horizontal': true}"/>
+                            <field name="target_type" widget="radio" options="{'horizontal': True}"/>
                             <field name="field_id" options="{'no_create': True}" 
                                    context="{'default_model_id': model_id}"
                                    invisible="target_type != 'field'"
@@ -22,10 +22,10 @@
                                    required="target_type == 'button'"/>
                             <field name="rule_type"/>
                             <field name="view_type"/>
-                            <field name="domain" placeholder="e.g. [('state', '=', 'done')]"/>
+                            <field name="domain" placeholder="e.g. state == 'done'"/>
                         </group>
                         <group>
-                            <field name="apply_behavior" widget="radio" options="{'horizontal': true}"/>
+                            <field name="apply_behavior" widget="radio" options="{'horizontal': True}"/>
                             <field name="group_ids" widget="many2many_tags" placeholder="Groups..."/>
                             <field name="user_ids" widget="many2many_tags" placeholder="Specific Users..."/>
                         </group>
@@ -75,7 +75,7 @@
     <record id="action_field_security_rule" model="ir.actions.act_window">
         <field name="name">UI &amp; Field Security Rules</field>
         <field name="res_model">field.security.rule</field>
-        <field name="view_mode">tree,form</field>
+        <field name="view_mode">list,form</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
                 Create your first UI security rule!
